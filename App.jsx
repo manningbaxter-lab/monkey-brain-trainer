@@ -11,8 +11,13 @@ export default function App() {
 
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(30);
+
   const [timeLeft, setTimeLeft] = useState(0);
   const [running, setRunning] = useState(false);
+
+  const [brutalMode, setBrutalMode] = useState(
+    JSON.parse(localStorage.getItem("brutalMode")) ?? false
+  );
 
   const MIN_SECONDS = 10 * 60;
 
@@ -25,6 +30,26 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("mbt_tasks", JSON.stringify(tasks));
   }, [tasks]);
+
+  useEffect(() => {
+    localStorage.setItem("brutalMode", JSON.stringify(brutalMode));
+  }, [brutalMode]);
+
+  /* ---------- MIDNIGHT RESET ---------- */
+  useEffect(() => {
+    const lastReset = localStorage.getItem("lastReset");
+    const today = new Date().toDateString();
+
+    if (lastReset !== today) {
+      setTasks(tasks =>
+        tasks.map(t => ({
+          ...t,
+          doneToday: false
+        }))
+      );
+      localStorage.setItem("lastReset", today);
+    }
+  }, []);
 
   /* ---------- TIMER ---------- */
   useEffect(() => {
@@ -59,7 +84,7 @@ export default function App() {
       {
         id: Date.now(),
         title: newTask,
-        time: `${newHour}:${newMinute}`,
+        time: newHour || newMinute ? `${newHour}:${newMinute}` : "",
         repeat: repeatDaily,
         doneToday: false
       }
@@ -76,6 +101,7 @@ export default function App() {
     ));
     setActiveTaskId(null);
     setRunning(false);
+    setTimeLeft(0);
   }
 
   const activeTask = tasks.find(t => t.id === activeTaskId);
@@ -83,6 +109,15 @@ export default function App() {
   return (
     <div style={styles.page}>
       <h2>🐵 Monkey Brain Trainer</h2>
+
+      <label style={styles.toggle}>
+        <input
+          type="checkbox"
+          checked={brutalMode}
+          onChange={() => setBrutalMode(v => !v)}
+        />{" "}
+        Brutal Mode (hide timer)
+      </label>
 
       {/* ADD TASK */}
       <div style={styles.card}>
@@ -125,7 +160,8 @@ export default function App() {
       {tasks.map(task => (
         <div key={task.id} style={styles.card}>
           <p>
-            {task.title} {task.time && `@ ${task.time}`}
+            {task.title}
+            {task.time && ` @ ${task.time}`}
             {task.repeat && " (daily)"}
           </p>
 
@@ -138,7 +174,7 @@ export default function App() {
             </button>
           )}
 
-          {task.doneToday && <p style={styles.done}>Done</p>}
+          {task.doneToday && <p style={styles.done}>Done today</p>}
         </div>
       ))}
 
@@ -164,11 +200,13 @@ export default function App() {
             m
           </div>
 
-          <p style={styles.timer}>
-            {timeLeft > 0
-              ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`
-              : "Ready"}
-          </p>
+          {!brutalMode && (
+            <p style={styles.timer}>
+              {timeLeft > 0
+                ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`
+                : "Ready"}
+            </p>
+          )}
 
           {!running && (
             <button style={styles.btn} onClick={startTimer}>
@@ -248,6 +286,11 @@ const styles = {
     color: "#777",
     marginTop: 4
   },
+  toggle: {
+    fontSize: 12,
+    color: "#777",
+    marginBottom: 8
+  },
   done: {
     color: "#6f6"
   },
@@ -261,3 +304,4 @@ const styles = {
     marginTop: 16
   }
 };
+``
