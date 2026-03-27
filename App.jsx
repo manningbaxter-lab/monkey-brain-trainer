@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 
+const MIN_SECONDS = 10 * 60;
+
 export default function App() {
   const [tasks, setTasks] = useState([]);
-  const [activeTaskId, setActiveTaskId] = useState(null);
+  const [activeId, setActiveId] = useState(null);
 
-  const [newTask, setNewTask] = useState("");
-  const [newHour, setNewHour] = useState("");
-  const [newMinute, setNewMinute] = useState("");
-  const [repeatDaily, setRepeatDaily] = useState(false);
+  const [title, setTitle] = useState("");
+  const [repeat, setRepeat] = useState(false);
 
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(30);
@@ -19,34 +19,35 @@ export default function App() {
     JSON.parse(localStorage.getItem("brutalMode")) ?? false
   );
 
-  const MIN_SECONDS = 10 * 60;
+  const [streak, setStreak] = useState(0);
+  const [week, setWeek] = useState({ done: 0, quit: 0 });
 
-  /* ---------- LOAD / SAVE ---------- */
+  /* ---------- LOAD ---------- */
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("mbt_tasks"));
-    if (saved) setTasks(saved);
+    const saved = JSON.parse(localStorage.getItem("mbt"));
+    if (saved) {
+      setTasks(saved.tasks || []);
+      setStreak(saved.streak || 0);
+      setWeek(saved.week || { done: 0, quit: 0 });
+      setBrutalMode(saved.brutalMode ?? false);
+    }
   }, []);
 
+  /* ---------- SAVE ---------- */
   useEffect(() => {
-    localStorage.setItem("mbt_tasks", JSON.stringify(tasks));
-  }, [tasks]);
-
-  useEffect(() => {
-    localStorage.setItem("brutalMode", JSON.stringify(brutalMode));
-  }, [brutalMode]);
+    localStorage.setItem(
+      "mbt",
+      JSON.stringify({ tasks, streak, week, brutalMode })
+    );
+  }, [tasks, streak, week, brutalMode]);
 
   /* ---------- MIDNIGHT RESET ---------- */
   useEffect(() => {
-    const lastReset = localStorage.getItem("lastReset");
     const today = new Date().toDateString();
+    const last = localStorage.getItem("lastReset");
 
-    if (lastReset !== today) {
-      setTasks(tasks =>
-        tasks.map(t => ({
-          ...t,
-          doneToday: false
-        }))
-      );
+    if (today !== last) {
+      setTasks(ts => ts.map(t => ({ ...t, doneToday: false })));
       localStorage.setItem("lastReset", today);
     }
   }, []);
@@ -62,49 +63,60 @@ export default function App() {
     if (timeLeft === 0 && running) setRunning(false);
   }, [timeLeft, running]);
 
-  /* ---------- HELPERS ---------- */
-  function totalSeconds() {
-    return hours * 3600 + minutes * 60;
-  }
-
   function startTimer() {
-    const secs = totalSeconds();
-    if (secs < MIN_SECONDS) {
+    const seconds = hours * 3600 + minutes * 60;
+    if (seconds < MIN_SECONDS) {
       alert("Minimum focus time is 10 minutes.");
       return;
     }
-    setTimeLeft(secs);
+    setTimeLeft(seconds);
     setRunning(true);
   }
 
   function addTask() {
-    if (!newTask.trim()) return;
+    if (!title.trim()) return;
     setTasks([
       ...tasks,
       {
         id: Date.now(),
-        title: newTask,
-        time: newHour || newMinute ? `${newHour}:${newMinute}` : "",
-        repeat: repeatDaily,
+        title,
+        repeat,
         doneToday: false
       }
     ]);
-    setNewTask("");
-    setNewHour("");
-    setNewMinute("");
-    setRepeatDaily(false);
+    setTitle("");
+    setRepeat(false);
   }
 
   function completeTask(id) {
     setTasks(tasks.map(t =>
       t.id === id ? { ...t, doneToday: true } : t
     ));
-    setActiveTaskId(null);
+    setStreak(s => s + 1);
+    setWeek(w => ({ ...w, done: w.done + 1 }));
+    setActiveId(null);
     setRunning(false);
     setTimeLeft(0);
   }
 
-  const activeTask = tasks.find(t => t.id === activeTaskId);
+  function quitTask() {
+    setWeek(w => ({ ...w, quit: w.quit + 1 }));
+    setStreak(s => Math.max(0, s - 1));
+    setRunning(false);
+    setTimeLeft(0);
+    setActiveId(null);
+  }
+
+  function deleteTask(id) {
+    setTasks(tasks.filter(t => t.id !== id));
+    if (activeId === id) {
+      setRunning(false);
+      setTimeLeft(0);
+      setActiveId(null);
+    }
+  }
+
+  const active = tasks.find(t => t.id === activeId);
 
   return (
     <div style={styles.page}>
@@ -115,193 +127,35 @@ export default function App() {
           type="checkbox"
           checked={brutalMode}
           onChange={() => setBrutalMode(v => !v)}
-        />{" "}
-        Brutal Mode (hide timer)
+        /> Brutal Mode (hide timer)
       </label>
 
       {/* ADD TASK */}
       <div style={styles.card}>
         <input
           style={styles.input}
-          placeholder="Task description"
-          value={newTask}
-          onChange={e => setNewTask(e.target.value)}
+          placeholder="Task"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
         />
-
-        <div style={styles.row}>
-          <input
-            style={styles.time}
-            placeholder="HH"
-            value={newHour}
-            onChange={e => setNewHour(e.target.value)}
-          />
-          :
-          <input
-            style={styles.time}
-            placeholder="MM"
-            value={newMinute}
-            onChange={e => setNewMinute(e.target.value)}
-          />
-        </div>
-
-        <label style={styles.checkbox}>
+        <label style={styles.small}>
           <input
             type="checkbox"
-            checked={repeatDaily}
-            onChange={() => setRepeatDaily(v => !v)}
-          />
-          Repeat daily
+            checked={repeat}
+            onChange={() => setRepeat(v => !v)}
+          /> Repeat daily
         </label>
-
         <button style={styles.btn} onClick={addTask}>Add task</button>
       </div>
 
       {/* TASK LIST */}
-      {tasks.map(task => (
-        <div key={task.id} style={styles.card}>
-          <p>
-            {task.title}
-            {task.time && ` @ ${task.time}`}
-            {task.repeat && " (daily)"}
-          </p>
+      {tasks.map(t => (
+        <div key={t.id} style={styles.card}>
+          <p>{t.title} {t.repeat && "(daily)"}</p>
 
-          {!task.doneToday && (
-            <button
-              style={styles.btn}
-              onClick={() => setActiveTaskId(task.id)}
-            >
+          {!t.doneToday && (
+            <button style={styles.btn} onClick={() => setActiveId(t.id)}>
               Start
             </button>
           )}
 
-          {task.doneToday && <p style={styles.done}>Done today</p>}
-        </div>
-      ))}
-
-      {/* ACTIVE TASK */}
-      {activeTask && (
-        <div style={styles.card}>
-          <h3>{activeTask.title}</h3>
-
-          <div style={styles.row}>
-            <input
-              type="number"
-              style={styles.time}
-              value={hours}
-              onChange={e => setHours(Number(e.target.value))}
-            />
-            h
-            <input
-              type="number"
-              style={styles.time}
-              value={minutes}
-              onChange={e => setMinutes(Number(e.target.value))}
-            />
-            m
-          </div>
-
-          {!brutalMode && (
-            <p style={styles.timer}>
-              {timeLeft > 0
-                ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`
-                : "Ready"}
-            </p>
-          )}
-
-          {!running && (
-            <button style={styles.btn} onClick={startTimer}>
-              Start focus
-            </button>
-          )}
-
-          {timeLeft === 0 && !running && (
-            <button
-              style={styles.btn}
-              onClick={() => completeTask(activeTask.id)}
-            >
-              Mark complete
-            </button>
-          )}
-        </div>
-      )}
-
-      <p style={styles.footer}>Comfort rots. Effort adapts.</p>
-    </div>
-  );
-}
-
-/* ---------- STYLES ---------- */
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "#000",
-    color: "#fff",
-    padding: 16,
-    fontFamily: "system-ui",
-    textAlign: "center"
-  },
-  card: {
-    background: "#111",
-    border: "1px solid #222",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12
-  },
-  input: {
-    width: "100%",
-    padding: 12,
-    borderRadius: 8,
-    border: "1px solid #333",
-    background: "#000",
-    color: "#fff",
-    marginBottom: 8
-  },
-  time: {
-    width: 60,
-    padding: 8,
-    margin: 4,
-    textAlign: "center",
-    borderRadius: 6,
-    border: "1px solid #333",
-    background: "#000",
-    color: "#fff"
-  },
-  row: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 4
-  },
-  btn: {
-    width: "100%",
-    padding: 12,
-    background: "#222",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    marginTop: 8
-  },
-  checkbox: {
-    fontSize: 12,
-    color: "#777",
-    marginTop: 4
-  },
-  toggle: {
-    fontSize: 12,
-    color: "#777",
-    marginBottom: 8
-  },
-  done: {
-    color: "#6f6"
-  },
-  timer: {
-    fontSize: 20,
-    margin: 8
-  },
-  footer: {
-    fontSize: 11,
-    color: "#666",
-    marginTop: 16
-  }
-};
-``
