@@ -116,6 +116,35 @@ export default function App() {
     }
   }
 
+  /* ---------- EXPORT WEEKLY REPORT ---------- */
+  function exportWeeklyReport() {
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + 1);
+
+    const csv = [
+      ["Metric", "Value"],
+      ["Week Starting", startOfWeek.toDateString()],
+      ["Tasks Completed", week.done],
+      ["Tasks Quit", week.quit],
+      ["Net Score", week.done - week.quit],
+      ["Current Streak", streak]
+    ]
+      .map(row => row.join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `monkey-brain-weekly-report-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+  }
+
   const active = tasks.find(t => t.id === activeId);
 
   return (
@@ -188,7 +217,9 @@ export default function App() {
           {!brutalMode && (
             <p style={styles.timer}>
               {timeLeft
-                ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`
+                ? `${Math.floor(timeLeft / 60)}:${String(
+                    timeLeft % 60
+                  ).padStart(2, "0")}`
                 : "Ready"}
             </p>
           )}
@@ -201,7 +232,10 @@ export default function App() {
 
           {timeLeft === 0 && !running && (
             <>
-              <button style={styles.btn} onClick={() => completeTask(active.id)}>
+              <button
+                style={styles.btn}
+                onClick={() => completeTask(active.id)}
+              >
                 Mark complete
               </button>
               <button style={styles.penalty} onClick={quitTask}>
@@ -212,10 +246,13 @@ export default function App() {
         </div>
       )}
 
-      {/* STATS */}
+      {/* STATS + EXPORT */}
       <div style={styles.card}>
         <p>🔥 Streak: {streak}</p>
         <p>📊 This week — ✅ {week.done} ❌ {week.quit} ⚖ {week.done - week.quit}</p>
+        <button style={styles.btn} onClick={exportWeeklyReport}>
+          Export weekly report
+        </button>
       </div>
 
       <p style={styles.footer}>Comfort rots. Effort adapts.</p>
@@ -299,3 +336,4 @@ const styles = {
     marginTop: 16
   }
 };
+``
