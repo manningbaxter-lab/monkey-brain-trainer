@@ -98,9 +98,7 @@ export default function App() {
     setStreak(s => s + 1);
     setWeek(w => ({ ...w, done: w.done + 1 }));
     setSnakeUnlocked(true);
-    setActiveId(null);
-    setRunning(false);
-    setTimeLeft(0);
+    resetFocus();
   }
 
   function quitTask() {
@@ -160,7 +158,8 @@ export default function App() {
             type="checkbox"
             checked={repeatDaily}
             onChange={() => setRepeatDaily(v => !v)}
-          /> Repeat daily
+          />{" "}
+          Repeat daily
         </label>
         <button style={styles.btn} onClick={addTask}>
           Add task
@@ -249,11 +248,19 @@ export default function App() {
         </p>
       </div>
 
-      {snakeUnlocked && (
-        <button style={styles.btn} onClick={() => setShowSnake(true)}>
-          Play Snake (reward)
-        </button>
-      )}
+      {/* SNAKE BUTTON (ALWAYS VISIBLE) */}
+      <button
+        style={{
+          ...styles.btn,
+          opacity: snakeUnlocked ? 1 : 0.4,
+          cursor: snakeUnlocked ? "pointer" : "not-allowed"
+        }}
+        disabled={!snakeUnlocked}
+        onClick={() => snakeUnlocked && setShowSnake(true)}
+      >
+        🐍 Snake
+        {!snakeUnlocked && " — complete a task to unlock"}
+      </button>
 
       <p style={styles.footer}>Comfort rots. Effort adapts.</p>
     </div>
