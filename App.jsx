@@ -9,9 +9,11 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState(0);
 
   const [streak, setStreak] = useState(0);
-  const [penalty, setPenalty] = useState(false);
+  const [hardMode, setHardMode] = useState(true);
 
-  // ✅ LOAD PERSISTED STATE
+  const [week, setWeek] = useState({ done: 0, quit: 0 });
+
+  /* ---------- LOAD STATE ---------- */
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("mbt"));
     if (saved) {
@@ -19,18 +21,34 @@ export default function App() {
       setCommitted(saved.committed);
       setDone(saved.done);
       setStreak(saved.streak);
+      setWeek(saved.week);
+      setHardMode(saved.hardMode);
     }
+
+    const lastOpen = localStorage.getItem("lastOpen");
+    const today = new Date().toDateString();
+    if (lastOpen && lastOpen !== today) {
+      setStreak(s => Math.max(0, s - 1));
+    }
+    localStorage.setItem("lastOpen", today);
   }, []);
 
-  // ✅ SAVE STATE
+  /* ---------- SAVE STATE ---------- */
   useEffect(() => {
     localStorage.setItem(
       "mbt",
-      JSON.stringify({ task, committed, done, streak })
+      JSON.stringify({
+        task,
+        committed,
+        done,
+        streak,
+        week,
+        hardMode
+      })
     );
-  }, [task, committed, done, streak]);
+  }, [task, committed, done, streak, week, hardMode]);
 
-  // ✅ TIMER
+  /* ---------- TIMER ---------- */
   useEffect(() => {
     if (!timeLeft) return;
     const t = setInterval(() => setTimeLeft(v => v - 1), 1000);
@@ -43,7 +61,6 @@ export default function App() {
 
   function start(minutes) {
     setLocked(true);
-    setPenalty(false);
     setTimeLeft(minutes * 60);
   }
 
@@ -56,18 +73,27 @@ export default function App() {
     if (done) return;
     setDone(true);
     setStreak(s => s + 1);
+    setWeek(w => ({ ...w, done: w.done + 1 }));
   }
 
-  function failDiscipline() {
-    setPenalty(true);
-    setStreak(s => Math.max(0, s - 1));
+  function quitTask() {
+    setWeek(w => ({ ...w, quit: w.quit + 1 }));
+    if (hardMode) setStreak(s => Math.max(0, s - 1));
   }
 
   return (
     <div style={styles.page}>
-      <h2 style={{ marginBottom: 8 }}>🐵 Monkey Brain Trainer</h2>
+      <h2>🐵 Monkey Brain Trainer</h2>
 
-      {/* LOCK */}
+      <label style={styles.toggle}>
+        <input
+          type="checkbox"
+          checked={hardMode}
+          onChange={() => setHardMode(v => !v)}
+        />{" "}
+        Hard Mode
+      </label>
+
       {locked && (
         <div style={styles.card}>
           <p>Focus first.</p>
@@ -76,6 +102,7 @@ export default function App() {
               ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`
               : "Start a session"}
           </p>
+
           {!timeLeft && (
             <>
               <button style={styles.btn} onClick={() => start(30)}>30 min</button>
@@ -85,7 +112,6 @@ export default function App() {
         </div>
       )}
 
-      {/* TASK INPUT */}
       <div style={styles.card}>
         <input
           style={styles.input}
@@ -94,41 +120,45 @@ export default function App() {
           disabled={committed}
           onChange={e => setTask(e.target.value)}
         />
+
         {!committed && (
           <button style={styles.btn} onClick={commitTask}>
-            Commit task
+            Commit
           </button>
         )}
+
         {committed && !done && (
           <p style={styles.hint}>Do it. Phone down.</p>
         )}
       </div>
 
-      {/* COMPLETE */}
       {committed && (
         <div style={styles.card}>
           <p style={{ textDecoration: done ? "line-through" : "none" }}>
             {task}
           </p>
           {!done && (
-            <button style={styles.btn} onClick={completeTask}>
-              Mark complete
-            </button>
+            <>
+              <button style={styles.btn} onClick={completeTask}>
+                Mark complete
+              </button>
+              <button style={styles.penalty} onClick={quitTask}>
+                I quit / got distracted
+              </button>
+            </>
           )}
         </div>
       )}
 
-      {/* PENALTY */}
-      {!done && committed && (
-        <button style={styles.penalty} onClick={failDiscipline}>
-          I quit / got distracted
-        </button>
-      )}
-
-      {/* STATS */}
       <div style={styles.card}>
         <p>🔥 Streak: {streak}</p>
-        {penalty && <p style={{ color: "#f66" }}>Penalty applied</p>}
+      </div>
+
+      <div style={styles.card}>
+        <p>📊 This week</p>
+        <p>✅ Done: {week.done}</p>
+        <p>❌ Quit: {week.quit}</p>
+        <p>⚖ Net: {week.done - week.quit}</p>
       </div>
 
       <p style={styles.footer}>Comfort rots. Effort adapts.</p>
@@ -169,21 +199,26 @@ const styles = {
     border: "none",
     borderRadius: 8
   },
+  penalty: {
+    width: "100%",
+    padding: 10,
+    marginTop: 6,
+    background: "#400",
+    border: "none",
+    borderRadius: 8,
+    color: "#fff"
+  },
   timer: {
-    fontSize: 20,
-    margin: "8px 0"
+    fontSize: 20
   },
   hint: {
     fontSize: 12,
     color: "#777"
   },
-  penalty: {
-    width: "100%",
-    padding: 10,
-    background: "#400",
-    border: "none",
-    borderRadius: 8,
-    color: "#fff"
+  toggle: {
+    fontSize: 12,
+    color: "#777",
+    marginBottom: 8
   },
   footer: {
     fontSize: 11,
