@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 export default function Snake({ onExit }) {
   const canvasRef = useRef(null);
@@ -12,6 +12,10 @@ export default function Snake({ onExit }) {
   const size = 20;
   const speed = 120;
 
+  const MAX_TIME = 3 * 60 * 1000; // 3 minutes
+  const [progress, setProgress] = useState(100);
+
+  /* ---------- GAME LOOP ---------- */
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
@@ -25,7 +29,7 @@ export default function Snake({ onExit }) {
         head.x >= grid ||
         head.y >= grid
       ) {
-        onExit();
+        vibrateAndExit();
         return;
       }
 
@@ -53,7 +57,24 @@ export default function Snake({ onExit }) {
     return () => clearInterval(interval);
   }, []);
 
-  /* ---------- KEYBOARD CONTROLS ---------- */
+  /* ---------- HARD AUTO-END + PROGRESS ---------- */
+  useEffect(() => {
+    const start = Date.now();
+
+    const tick = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const remaining = Math.max(0, 100 - (elapsed / MAX_TIME) * 100);
+      setProgress(remaining);
+
+      if (elapsed >= MAX_TIME) {
+        vibrateAndExit();
+      }
+    }, 200);
+
+    return () => clearInterval(tick);
+  }, []);
+
+  /* ---------- KEYBOARD ---------- */
   useEffect(() => {
     const onKey = e => {
       if (e.key === "ArrowUp") dir = { x: 0, y: -1 };
@@ -85,9 +106,38 @@ export default function Snake({ onExit }) {
     }
   }
 
+  /* ---------- VIBRATION ---------- */
+  function vibrateAndExit() {
+    if (navigator.vibrate) {
+      navigator.vibrate([200, 100, 200]);
+    }
+    onExit();
+  }
+
   return (
     <div style={{ textAlign: "center", color: "#fff" }}>
-      <p>Reward unlocked. Limited time.</p>
+      <p>Reward unlocked — limited time</p>
+
+      {/* TIME BAR */}
+      <div
+        style={{
+          width: "100%",
+          height: 6,
+          background: "#222",
+          borderRadius: 3,
+          overflow: "hidden",
+          marginBottom: 8
+        }}
+      >
+        <div
+          style={{
+            width: `${progress}%`,
+            height: "100%",
+            background: "#0f0",
+            transition: "width 0.2s linear"
+          }}
+        />
+      </div>
 
       <canvas
         ref={canvasRef}
@@ -98,7 +148,7 @@ export default function Snake({ onExit }) {
         style={{ touchAction: "none" }}
       />
 
-      <button onClick={onExit} style={{ marginTop: 12 }}>
+      <button onClick={vibrateAndExit} style={{ marginTop: 12 }}>
         Exit
       </button>
     </div>
