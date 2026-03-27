@@ -1,0 +1,10 @@
+{
+  "name": "Monkey Brain Trainer",
+  "short_name": "MBT",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": []
+}
+``
