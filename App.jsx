@@ -1,99 +1,75 @@
 import React, { useState, useEffect } from "react";
+import Snake from "./Snake.jsx";
 
 const MIN_SECONDS = 10 * 60;
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [activeId, setActiveId] = useState(null);
-
   const [title, setTitle] = useState("");
   const [repeat, setRepeat] = useState(false);
 
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(30);
-
   const [timeLeft, setTimeLeft] = useState(0);
   const [running, setRunning] = useState(false);
-
-  const [brutalMode, setBrutalMode] = useState(
-    JSON.parse(localStorage.getItem("brutalMode")) ?? false
-  );
 
   const [streak, setStreak] = useState(0);
   const [week, setWeek] = useState({ done: 0, quit: 0 });
 
-  /* ---------- LOAD ---------- */
+  const [snakeUnlocked, setSnakeUnlocked] = useState(false);
+  const [showSnake, setShowSnake] = useState(false);
+
+  /* LOAD / SAVE */
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("mbt"));
     if (saved) {
       setTasks(saved.tasks || []);
       setStreak(saved.streak || 0);
       setWeek(saved.week || { done: 0, quit: 0 });
-      setBrutalMode(saved.brutalMode ?? false);
     }
   }, []);
 
-  /* ---------- SAVE ---------- */
   useEffect(() => {
-    localStorage.setItem(
-      "mbt",
-      JSON.stringify({ tasks, streak, week, brutalMode })
-    );
-  }, [tasks, streak, week, brutalMode]);
+    localStorage.setItem("mbt", JSON.stringify({ tasks, streak, week }));
+  }, [tasks, streak, week]);
 
-  /* ---------- MIDNIGHT RESET ---------- */
+  /* MIDNIGHT RESET */
   useEffect(() => {
     const today = new Date().toDateString();
     const last = localStorage.getItem("lastReset");
-
     if (today !== last) {
       setTasks(ts => ts.map(t => ({ ...t, doneToday: false })));
       localStorage.setItem("lastReset", today);
     }
   }, []);
 
-  /* ---------- TIMER ---------- */
+  /* TIMER */
   useEffect(() => {
     if (!running || timeLeft <= 0) return;
     const t = setInterval(() => setTimeLeft(s => s - 1), 1000);
     return () => clearInterval(t);
   }, [running, timeLeft]);
 
-  useEffect(() => {
-    if (timeLeft === 0 && running) setRunning(false);
-  }, [timeLeft, running]);
-
   function startTimer() {
     const seconds = hours * 3600 + minutes * 60;
-    if (seconds < MIN_SECONDS) {
-      alert("Minimum focus time is 10 minutes.");
-      return;
-    }
+    if (seconds < MIN_SECONDS) return alert("Minimum 10 minutes");
     setTimeLeft(seconds);
     setRunning(true);
   }
 
   function addTask() {
     if (!title.trim()) return;
-    setTasks([
-      ...tasks,
-      {
-        id: Date.now(),
-        title,
-        repeat,
-        doneToday: false
-      }
-    ]);
+    setTasks([...tasks, { id: Date.now(), title, repeat, doneToday: false }]);
     setTitle("");
     setRepeat(false);
   }
 
   function completeTask(id) {
-    setTasks(tasks.map(t =>
-      t.id === id ? { ...t, doneToday: true } : t
-    ));
+    setTasks(tasks.map(t => t.id === id ? { ...t, doneToday: true } : t));
     setStreak(s => s + 1);
     setWeek(w => ({ ...w, done: w.done + 1 }));
+    setSnakeUnlocked(true);
     setActiveId(null);
     setRunning(false);
     setTimeLeft(0);
@@ -102,238 +78,60 @@ export default function App() {
   function quitTask() {
     setWeek(w => ({ ...w, quit: w.quit + 1 }));
     setStreak(s => Math.max(0, s - 1));
-    setRunning(false);
-    setTimeLeft(0);
     setActiveId(null);
-  }
-
-  function deleteTask(id) {
-    setTasks(tasks.filter(t => t.id !== id));
-    if (activeId === id) {
-      setRunning(false);
-      setTimeLeft(0);
-      setActiveId(null);
-    }
-  }
-
-  /* ---------- EXPORT WEEKLY REPORT ---------- */
-  function exportWeeklyReport() {
-    const startOfWeek = new Date();
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + 1);
-
-    const csv = [
-      ["Metric", "Value"],
-      ["Week Starting", startOfWeek.toDateString()],
-      ["Tasks Completed", week.done],
-      ["Tasks Quit", week.quit],
-      ["Net Score", week.done - week.quit],
-      ["Current Streak", streak]
-    ]
-      .map(row => row.join(","))
-      .join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `monkey-brain-weekly-report-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
-    a.click();
-
-    URL.revokeObjectURL(url);
   }
 
   const active = tasks.find(t => t.id === activeId);
 
+  if (showSnake) {
+    return <Snake onExit={() => { setShowSnake(false); setSnakeUnlocked(false); }} />;
+  }
+
   return (
-    <div style={styles.page}>
+    <div style={{ background: "#000", color: "#fff", minHeight: "100vh", padding: 16 }}>
       <h2>🐵 Monkey Brain Trainer</h2>
 
-      <label style={styles.toggle}>
-        <input
-          type="checkbox"
-          checked={brutalMode}
-          onChange={() => setBrutalMode(v => !v)}
-        /> Brutal Mode (hide timer)
+      <input
+        placeholder="Task"
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+      />
+      <label>
+        <input type="checkbox" checked={repeat} onChange={() => setRepeat(v => !v)} />
+        Repeat daily
       </label>
+      <button onClick={addTask}>Add</button>
 
-      {/* ADD TASK */}
-      <div style={styles.card}>
-        <input
-          style={styles.input}
-          placeholder="Task"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-        />
-        <label style={styles.small}>
-          <input
-            type="checkbox"
-            checked={repeat}
-            onChange={() => setRepeat(v => !v)}
-          /> Repeat daily
-        </label>
-        <button style={styles.btn} onClick={addTask}>Add task</button>
-      </div>
-
-      {/* TASK LIST */}
       {tasks.map(t => (
-        <div key={t.id} style={styles.card}>
-          <p>{t.title} {t.repeat && "(daily)"}</p>
-
-          {!t.doneToday && (
-            <button style={styles.btn} onClick={() => setActiveId(t.id)}>
-              Start
-            </button>
-          )}
-
-          <button style={styles.delete} onClick={() => deleteTask(t.id)}>
-            Delete
-          </button>
+        <div key={t.id}>
+          <p>{t.title}</p>
+          {!t.doneToday && <button onClick={() => setActiveId(t.id)}>Start</button>}
         </div>
       ))}
 
-      {/* ACTIVE TASK */}
       {active && (
-        <div style={styles.card}>
-          <h3>{active.title}</h3>
-
-          <div>
-            <input
-              type="number"
-              style={styles.time}
-              value={hours}
-              onChange={e => setHours(Number(e.target.value))}
-            /> h
-            <input
-              type="number"
-              style={styles.time}
-              value={minutes}
-              onChange={e => setMinutes(Number(e.target.value))}
-            /> m
-          </div>
-
-          {!brutalMode && (
-            <p style={styles.timer}>
-              {timeLeft
-                ? `${Math.floor(timeLeft / 60)}:${String(
-                    timeLeft % 60
-                  ).padStart(2, "0")}`
-                : "Ready"}
-            </p>
-          )}
-
-          {!running && (
-            <button style={styles.btn} onClick={startTimer}>
-              Start focus
-            </button>
-          )}
-
-          {timeLeft === 0 && !running && (
+        <div>
+          <input type="number" value={hours} onChange={e => setHours(+e.target.value)} /> h
+          <input type="number" value={minutes} onChange={e => setMinutes(+e.target.value)} /> m
+          <button onClick={startTimer}>Start Focus</button>
+          {timeLeft === 0 && (
             <>
-              <button
-                style={styles.btn}
-                onClick={() => completeTask(active.id)}
-              >
-                Mark complete
-              </button>
-              <button style={styles.penalty} onClick={quitTask}>
-                I quit / got distracted
-              </button>
+              <button onClick={() => completeTask(active.id)}>Complete</button>
+              <button onClick={quitTask}>Quit</button>
             </>
           )}
         </div>
       )}
 
-      {/* STATS + EXPORT */}
-      <div style={styles.card}>
-        <p>🔥 Streak: {streak}</p>
-        <p>📊 This week — ✅ {week.done} ❌ {week.quit} ⚖ {week.done - week.quit}</p>
-        <button style={styles.btn} onClick={exportWeeklyReport}>
-          Export weekly report
-        </button>
-      </div>
+      <p>🔥 Streak: {streak}</p>
+      <p>📊 Week ✅ {week.done} ❌ {week.quit}</p>
 
-      <p style={styles.footer}>Comfort rots. Effort adapts.</p>
+      {snakeUnlocked && (
+        <button onClick={() => setShowSnake(true)}>
+          Play Snake (Reward)
+        </button>
+      )}
     </div>
   );
 }
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "#000",
-    color: "#fff",
-    padding: 16,
-    fontFamily: "system-ui",
-    textAlign: "center"
-  },
-  card: {
-    background: "#111",
-    border: "1px solid #222",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12
-  },
-  input: {
-    width: "100%",
-    padding: 12,
-    background: "#000",
-    color: "#fff",
-    border: "1px solid #333",
-    borderRadius: 8
-  },
-  btn: {
-    width: "100%",
-    padding: 12,
-    marginTop: 8,
-    background: "#222",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8
-  },
-  delete: {
-    width: "100%",
-    padding: 10,
-    marginTop: 6,
-    background: "#400",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8
-  },
-  penalty: {
-    width: "100%",
-    padding: 10,
-    marginTop: 6,
-    background: "#600",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8
-  },
-  time: {
-    width: 60,
-    margin: 4,
-    padding: 8,
-    textAlign: "center"
-  },
-  small: {
-    fontSize: 12,
-    color: "#777"
-  },
-  toggle: {
-    fontSize: 12,
-    color: "#777",
-    marginBottom: 8
-  },
-  timer: {
-    fontSize: 20,
-    margin: 8
-  },
-  footer: {
-    fontSize: 11,
-    color: "#666",
-    marginTop: 16
-  }
-};
 ``
