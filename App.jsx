@@ -1,197 +1,134 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
-  CheckCircle,
-  Flame,
   Lock,
   Timer,
+  CheckCircle,
+  Flame,
   Brain,
   Skull,
-  CloudOff,
   Cloud,
+  CloudOff,
   Shield
 } from "lucide-react";
 
-export default function MonkeyBrainTrainerUltimate() {
+export default function App() {
   const [task, setTask] = useState("");
   const [hasTask, setHasTask] = useState(false);
-  const [taskDone, setTaskDone] = useState(false);
-
-  const [streak, setStreak] = useState(0);
-  const [painScore, setPainScore] = useState(0);
+  const [done, setDone] = useState(false);
 
   const [locked, setLocked] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [sessionStarted, setSessionStarted] = useState(false);
 
-  const [dopamineFast, setDopamineFast] = useState({
+  const [streak, setStreak] = useState(0);
+  const [pain, setPain] = useState(0);
+
+  const [dopamine, setDopamine] = useState({
     youtube: false,
     sugar: false,
     gaming: false
   });
 
   const [cloudSynced, setCloudSynced] = useState(false);
-  const [lastDay, setLastDay] = useState(new Date().toDateString());
 
-  /* -------- TIMER -------- */
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    if (!timeLeft) return;
     const t = setInterval(() => setTimeLeft(v => v - 1), 1000);
     return () => clearInterval(t);
   }, [timeLeft]);
 
   useEffect(() => {
-    if (timeLeft === 0 && sessionStarted) {
-      setLocked(false);
-    }
-  }, [timeLeft, sessionStarted]);
+    if (timeLeft === 0) setLocked(false);
+  }, [timeLeft]);
 
-  /* -------- DAILY RESET + DECAY -------- */
-  useEffect(() => {
-    const today = new Date().toDateString();
-    if (today !== lastDay) {
-      setTask("");
-      setHasTask(false);
-      setTaskDone(false);
-      setDopamineFast({ youtube: false, sugar: false, gaming: false });
-      setPainScore(0);
-      setStreak(prev => Math.max(0, prev - 1));
-      setLocked(true);
-      setSessionStarted(false);
-      setLastDay(today);
-    }
-  }, [lastDay]);
-
-  /* -------- CLOUD SYNC (SIMULATED) -------- */
   useEffect(() => {
     setCloudSynced(false);
-    const t = setTimeout(() => setCloudSynced(true), 1500);
+    const t = setTimeout(() => setCloudSynced(true), 1200);
     return () => clearTimeout(t);
-  }, [taskDone, streak]);
+  }, [done, streak]);
 
-  /* -------- ACTIONS -------- */
-  function startSession(min) {
+  function start(minutes) {
     setLocked(true);
-    setSessionStarted(true);
-    setTimeLeft(min * 60);
+    setTimeLeft(minutes * 60);
   }
 
-  function commitTask() {
-    if (!task.trim()) return;
-    setHasTask(true);
+  function commit() {
+    if (task.trim()) setHasTask(true);
   }
 
-  function completeTask() {
-    if (taskDone) return;
-    setTaskDone(true);
+  function complete() {
+    if (done) return;
+    setDone(true);
     setStreak(s => s + 1);
-    setPainScore(p => p + 5);
+    setPain(p => p + 5);
   }
 
-  function breakFast(type) {
-    setDopamineFast(prev => ({ ...prev, [type]: true }));
+  function fail(type) {
+    setDopamine(d => ({ ...d, [type]: true }));
     setStreak(s => Math.max(0, s - 2));
-    setPainScore(p => Math.max(0, p - 3));
+    setPain(p => Math.max(0, p - 3));
   }
 
-  /* -------- ULTRA HARD MODE -------- */
   if (!locked && !hasTask) {
-    return (
-      <div style={styles.blank}>
-        No interface until a hard task is chosen.
-      </div>
-    );
+    return <div style={styles.blank}>No interface until a hard task is chosen.</div>;
   }
 
   return (
-    <div style={styles.container}>
-      <motion.h1 style={styles.title}>
-        🐵 Monkey Brain Trainer — Ultimate
-      </motion.h1>
+    <div style={styles.page}>
+      <h2>🐵 Monkey Brain Trainer</h2>
 
-      {/* LOCK SCREEN */}
-      <AnimatePresence>
-        {locked && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <div style={styles.card}>
-              <Lock />
-              <p>Discomfort is required.</p>
-              <strong>
-                {timeLeft > 0
-                  ? `${Math.floor(timeLeft / 60)}:${String(
-                      timeLeft % 60
-                    ).padStart(2, "0")}`
-                  : "Start"}
-              </strong>
-
-              {!sessionStarted && (
-                <>
-                  <button style={styles.btn} onClick={() => startSession(30)}>
-                    <Timer /> 30 min
-                  </button>
-                  <button style={styles.btn} onClick={() => startSession(60)}>
-                    <Timer /> 60 min
-                  </button>
-                </>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* TASK INPUT */}
-      <div style={styles.card}>
-        <input
-          style={styles.input}
-          placeholder="One hard task only"
-          value={task}
-          onChange={e => setTask(e.target.value)}
-          disabled={hasTask}
-        />
-        {!hasTask && (
-          <button style={styles.btn} onClick={commitTask}>
-            Commit
-          </button>
-        )}
-      </div>
-
-      {/* ACTIVE TASK */}
-      {hasTask && (
+      {locked && (
         <div style={styles.card}>
-          <span style={{ textDecoration: taskDone ? "line-through" : "none" }}>
-            {task}
-          </span>
-          <button style={styles.btn} onClick={completeTask}>
-            <CheckCircle />
-          </button>
+          <Lock />
+          <p>{timeLeft ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}` : "Start"}</p>
+          {!timeLeft && (
+            <>
+              <button style={styles.btn} onClick={() => start(30)}>
+                <Timer /> 30 min
+              </button>
+              <button style={styles.btn} onClick={() => start(60)}>
+                <Timer /> 60 min
+              </button>
+            </>
+          )}
         </div>
       )}
 
-      {/* DOPAMINE FAST */}
       <div style={styles.card}>
-        <p>Dopamine Rules</p>
-        {Object.keys(dopamineFast).map(d => (
+        <input
+          style={styles.input}
+          placeholder="One hard task"
+          value={task}
+          disabled={hasTask}
+          onChange={e => setTask(e.target.value)}
+        />
+        {!hasTask && <button style={styles.btn} onClick={commit}>Commit</button>}
+      </div>
+
+      {hasTask && (
+        <div style={styles.card}>
+          <p style={{ textDecoration: done ? "line-through" : "none" }}>{task}</p>
+          <button style={styles.btn} onClick={complete}><CheckCircle /></button>
+        </div>
+      )}
+
+      <div style={styles.card}>
+        {Object.keys(dopamine).map(k => (
           <button
-            key={d}
-            style={{
-              ...styles.btn,
-              background: dopamineFast[d] ? "#400" : "#222"
-            }}
-            onClick={() => breakFast(d)}
+            key={k}
+            style={{ ...styles.btn, background: dopamine[k] ? "#400" : "#222" }}
+            onClick={() => fail(k)}
           >
-            {dopamineFast[d] ? <Skull /> : <Brain />} {d}
+            {dopamine[k] ? <Skull /> : <Brain />} {k}
           </button>
         ))}
       </div>
 
-      {/* METRICS */}
       <div style={styles.card}>
-        <div>🔥 Streak: {streak}</div>
-        <div>⚖ Pain: {painScore}</div>
+        <p>🔥 Streak: {streak}</p>
+        <p>⚡ Pain: {pain}</p>
         <Flame />
       </div>
 
-      {/* STATUS */}
       <div style={styles.footer}>
         {cloudSynced ? <Cloud /> : <CloudOff />} Cloud
         <Shield /> PWA Ready
@@ -202,22 +139,57 @@ export default function MonkeyBrainTrainerUltimate() {
   );
 }
 
-/* -------- STYLES -------- */
 const styles = {
-  container: {
+  page: {
     minHeight: "100vh",
-    background: "black",
-    color: "white",
+    background: "#000",
+    color: "#fff",
     padding: 16,
-    fontFamily: "system-ui"
-  },
-  title: {
-    textAlign: "center",
-    fontSize: 18,
-    marginBottom: 12
+    fontFamily: "system-ui",
+    textAlign: "center"
   },
   card: {
     background: "#111",
     border: "1px solid #222",
-
-    
+    borderRadius: 12,
+    padding: 12,
+    margin: "12px 0",
+    display: "grid",
+    gap: 8
+  },
+  btn: {
+    background: "#222",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14
+  },
+  input: {
+    padding: 12,
+    borderRadius: 8,
+    border: "1px solid #333",
+    background: "#000",
+    color: "#fff"
+  },
+  blank: {
+    minHeight: "100vh",
+    background: "#000",
+    color: "#666",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24
+  },
+  footer: {
+    fontSize: 12,
+    color: "#777",
+    marginTop: 12,
+    display: "flex",
+    justifyContent: "space-between"
+  },
+  motto: {
+    fontSize: 11,
+    color: "#666"
+  }
+};
