@@ -2,15 +2,35 @@ import React, { useState, useEffect } from "react";
 
 export default function App() {
   const [task, setTask] = useState("");
-  const [taskCommitted, setTaskCommitted] = useState(false);
-  const [taskDone, setTaskDone] = useState(false);
+  const [committed, setCommitted] = useState(false);
+  const [done, setDone] = useState(false);
 
   const [locked, setLocked] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
 
   const [streak, setStreak] = useState(0);
+  const [penalty, setPenalty] = useState(false);
 
-  // TIMER
+  // ✅ LOAD PERSISTED STATE
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem("mbt"));
+    if (saved) {
+      setTask(saved.task);
+      setCommitted(saved.committed);
+      setDone(saved.done);
+      setStreak(saved.streak);
+    }
+  }, []);
+
+  // ✅ SAVE STATE
+  useEffect(() => {
+    localStorage.setItem(
+      "mbt",
+      JSON.stringify({ task, committed, done, streak })
+    );
+  }, [task, committed, done, streak]);
+
+  // ✅ TIMER
   useEffect(() => {
     if (!timeLeft) return;
     const t = setInterval(() => setTimeLeft(v => v - 1), 1000);
@@ -23,23 +43,29 @@ export default function App() {
 
   function start(minutes) {
     setLocked(true);
+    setPenalty(false);
     setTimeLeft(minutes * 60);
   }
 
   function commitTask() {
     if (!task.trim()) return;
-    setTaskCommitted(true);
+    setCommitted(true);
   }
 
   function completeTask() {
-    if (taskDone) return;
-    setTaskDone(true);
+    if (done) return;
+    setDone(true);
     setStreak(s => s + 1);
+  }
+
+  function failDiscipline() {
+    setPenalty(true);
+    setStreak(s => Math.max(0, s - 1));
   }
 
   return (
     <div style={styles.page}>
-      <h2>🐵 Monkey Brain Trainer</h2>
+      <h2 style={{ marginBottom: 8 }}>🐵 Monkey Brain Trainer</h2>
 
       {/* LOCK */}
       {locked && (
@@ -50,48 +76,41 @@ export default function App() {
               ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`
               : "Start a session"}
           </p>
-
           {!timeLeft && (
             <>
-              <button style={styles.btn} onClick={() => start(30)}>
-                30 min work
-              </button>
-              <button style={styles.btn} onClick={() => start(60)}>
-                60 min work
-              </button>
+              <button style={styles.btn} onClick={() => start(30)}>30 min</button>
+              <button style={styles.btn} onClick={() => start(60)}>60 min</button>
             </>
           )}
         </div>
       )}
 
-      {/* TASK INPUT — ALWAYS VISIBLE */}
+      {/* TASK INPUT */}
       <div style={styles.card}>
         <input
           style={styles.input}
           placeholder="One hard task"
           value={task}
-          disabled={taskCommitted}
+          disabled={committed}
           onChange={e => setTask(e.target.value)}
         />
-
-        {!taskCommitted && (
+        {!committed && (
           <button style={styles.btn} onClick={commitTask}>
             Commit task
           </button>
         )}
-
-        {taskCommitted && !taskDone && (
-          <p style={styles.hint}>Do the task. Phone down.</p>
+        {committed && !done && (
+          <p style={styles.hint}>Do it. Phone down.</p>
         )}
       </div>
 
-      {/* TASK DONE */}
-      {taskCommitted && (
+      {/* COMPLETE */}
+      {committed && (
         <div style={styles.card}>
-          <p style={{ textDecoration: taskDone ? "line-through" : "none" }}>
+          <p style={{ textDecoration: done ? "line-through" : "none" }}>
             {task}
           </p>
-          {!taskDone && (
+          {!done && (
             <button style={styles.btn} onClick={completeTask}>
               Mark complete
             </button>
@@ -99,9 +118,17 @@ export default function App() {
         </div>
       )}
 
-      {/* STREAK */}
+      {/* PENALTY */}
+      {!done && committed && (
+        <button style={styles.penalty} onClick={failDiscipline}>
+          I quit / got distracted
+        </button>
+      )}
+
+      {/* STATS */}
       <div style={styles.card}>
         <p>🔥 Streak: {streak}</p>
+        {penalty && <p style={{ color: "#f66" }}>Penalty applied</p>}
       </div>
 
       <p style={styles.footer}>Comfort rots. Effort adapts.</p>
@@ -123,25 +150,24 @@ const styles = {
     border: "1px solid #222",
     borderRadius: 12,
     padding: 12,
-    margin: "12px 0",
-    display: "grid",
-    gap: 8
+    margin: "12px 0"
   },
   input: {
+    width: "100%",
     padding: 12,
-    fontSize: 16,
     borderRadius: 8,
     border: "1px solid #333",
     background: "#000",
     color: "#fff"
   },
   btn: {
+    width: "100%",
     padding: 12,
+    marginTop: 8,
     background: "#222",
     color: "#fff",
     border: "none",
-    borderRadius: 8,
-    fontSize: 14
+    borderRadius: 8
   },
   timer: {
     fontSize: 20,
@@ -151,9 +177,17 @@ const styles = {
     fontSize: 12,
     color: "#777"
   },
+  penalty: {
+    width: "100%",
+    padding: 10,
+    background: "#400",
+    border: "none",
+    borderRadius: 8,
+    color: "#fff"
+  },
   footer: {
     fontSize: 11,
     color: "#666",
-    marginTop: 12
+    marginTop: 16
   }
 };
