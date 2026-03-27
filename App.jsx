@@ -219,3 +219,5 @@ const styles = {
   card: {
     background: "#111",
     border: "1px solid #222",
+
+    
