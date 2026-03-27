@@ -159,3 +159,143 @@ export default function App() {
             </button>
           )}
 
+          <button style={styles.delete} onClick={() => deleteTask(t.id)}>
+            Delete
+          </button>
+        </div>
+      ))}
+
+      {/* ACTIVE TASK */}
+      {active && (
+        <div style={styles.card}>
+          <h3>{active.title}</h3>
+
+          <div>
+            <input
+              type="number"
+              style={styles.time}
+              value={hours}
+              onChange={e => setHours(Number(e.target.value))}
+            /> h
+            <input
+              type="number"
+              style={styles.time}
+              value={minutes}
+              onChange={e => setMinutes(Number(e.target.value))}
+            /> m
+          </div>
+
+          {!brutalMode && (
+            <p style={styles.timer}>
+              {timeLeft
+                ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`
+                : "Ready"}
+            </p>
+          )}
+
+          {!running && (
+            <button style={styles.btn} onClick={startTimer}>
+              Start focus
+            </button>
+          )}
+
+          {timeLeft === 0 && !running && (
+            <>
+              <button style={styles.btn} onClick={() => completeTask(active.id)}>
+                Mark complete
+              </button>
+              <button style={styles.penalty} onClick={quitTask}>
+                I quit / got distracted
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* STATS */}
+      <div style={styles.card}>
+        <p>🔥 Streak: {streak}</p>
+        <p>📊 This week — ✅ {week.done} ❌ {week.quit} ⚖ {week.done - week.quit}</p>
+      </div>
+
+      <p style={styles.footer}>Comfort rots. Effort adapts.</p>
+    </div>
+  );
+}
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#000",
+    color: "#fff",
+    padding: 16,
+    fontFamily: "system-ui",
+    textAlign: "center"
+  },
+  card: {
+    background: "#111",
+    border: "1px solid #222",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12
+  },
+  input: {
+    width: "100%",
+    padding: 12,
+    background: "#000",
+    color: "#fff",
+    border: "1px solid #333",
+    borderRadius: 8
+  },
+  btn: {
+    width: "100%",
+    padding: 12,
+    marginTop: 8,
+    background: "#222",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8
+  },
+  delete: {
+    width: "100%",
+    padding: 10,
+    marginTop: 6,
+    background: "#400",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8
+  },
+  penalty: {
+    width: "100%",
+    padding: 10,
+    marginTop: 6,
+    background: "#600",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8
+  },
+  time: {
+    width: 60,
+    margin: 4,
+    padding: 8,
+    textAlign: "center"
+  },
+  small: {
+    fontSize: 12,
+    color: "#777"
+  },
+  toggle: {
+    fontSize: 12,
+    color: "#777",
+    marginBottom: 8
+  },
+  timer: {
+    fontSize: 20,
+    margin: 8
+  },
+  footer: {
+    fontSize: 11,
+    color: "#666",
+    marginTop: 16
+  }
+};
