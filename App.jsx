@@ -1,171 +1,198 @@
 import React, { useState, useEffect } from "react";
 
 export default function App() {
-  const [task, setTask] = useState("");
-  const [committed, setCommitted] = useState(false);
-  const [done, setDone] = useState(false);
+  const [tasks, setTasks] = useState([]);
+  const [activeTaskId, setActiveTaskId] = useState(null);
 
-  const [locked, setLocked] = useState(true);
+  const [newTask, setNewTask] = useState("");
+  const [newHour, setNewHour] = useState("");
+  const [newMinute, setNewMinute] = useState("");
+  const [repeatDaily, setRepeatDaily] = useState(false);
+
+  const [hours, setHours] = useState(0);
+  const [minutes, setMinutes] = useState(30);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [running, setRunning] = useState(false);
 
-  const [streak, setStreak] = useState(0);
-  const [hardMode, setHardMode] = useState(true);
+  const MIN_SECONDS = 10 * 60;
 
-  const [week, setWeek] = useState({ done: 0, quit: 0 });
-
-  /* ---------- LOAD STATE ---------- */
+  /* ---------- LOAD / SAVE ---------- */
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("mbt"));
-    if (saved) {
-      setTask(saved.task);
-      setCommitted(saved.committed);
-      setDone(saved.done);
-      setStreak(saved.streak);
-      setWeek(saved.week);
-      setHardMode(saved.hardMode);
-    }
-
-    const lastOpen = localStorage.getItem("lastOpen");
-    const today = new Date().toDateString();
-    if (lastOpen && lastOpen !== today) {
-      setStreak(s => Math.max(0, s - 1));
-    }
-    localStorage.setItem("lastOpen", today);
+    const saved = JSON.parse(localStorage.getItem("mbt_tasks"));
+    if (saved) setTasks(saved);
   }, []);
 
-  /* ---------- SAVE STATE ---------- */
   useEffect(() => {
-    localStorage.setItem(
-      "mbt",
-      JSON.stringify({
-        task,
-        committed,
-        done,
-        streak,
-        week,
-        hardMode
-      })
-    );
-  }, [task, committed, done, streak, week, hardMode]);
+    localStorage.setItem("mbt_tasks", JSON.stringify(tasks));
+  }, [tasks]);
 
   /* ---------- TIMER ---------- */
   useEffect(() => {
-    if (!timeLeft) return;
-    const t = setInterval(() => setTimeLeft(v => v - 1), 1000);
+    if (!running || timeLeft <= 0) return;
+    const t = setInterval(() => setTimeLeft(s => s - 1), 1000);
     return () => clearInterval(t);
-  }, [timeLeft]);
+  }, [running, timeLeft]);
 
   useEffect(() => {
-    if (timeLeft === 0) setLocked(false);
-  }, [timeLeft]);
+    if (timeLeft === 0 && running) setRunning(false);
+  }, [timeLeft, running]);
 
-  function start(minutes) {
-    setLocked(true);
-    setTimeLeft(minutes * 60);
+  /* ---------- HELPERS ---------- */
+  function totalSeconds() {
+    return hours * 3600 + minutes * 60;
   }
 
-  function commitTask() {
-    if (!task.trim()) return;
-    setCommitted(true);
+  function startTimer() {
+    const secs = totalSeconds();
+    if (secs < MIN_SECONDS) {
+      alert("Minimum focus time is 10 minutes.");
+      return;
+    }
+    setTimeLeft(secs);
+    setRunning(true);
   }
 
-  function completeTask() {
-    if (done) return;
-    setDone(true);
-    setStreak(s => s + 1);
-    setWeek(w => ({ ...w, done: w.done + 1 }));
+  function addTask() {
+    if (!newTask.trim()) return;
+    setTasks([
+      ...tasks,
+      {
+        id: Date.now(),
+        title: newTask,
+        time: `${newHour}:${newMinute}`,
+        repeat: repeatDaily,
+        doneToday: false
+      }
+    ]);
+    setNewTask("");
+    setNewHour("");
+    setNewMinute("");
+    setRepeatDaily(false);
   }
 
-  function quitTask() {
-    setWeek(w => ({ ...w, quit: w.quit + 1 }));
-    if (hardMode) setStreak(s => Math.max(0, s - 1));
+  function completeTask(id) {
+    setTasks(tasks.map(t =>
+      t.id === id ? { ...t, doneToday: true } : t
+    ));
+    setActiveTaskId(null);
+    setRunning(false);
   }
+
+  const activeTask = tasks.find(t => t.id === activeTaskId);
 
   return (
     <div style={styles.page}>
       <h2>🐵 Monkey Brain Trainer</h2>
 
-      <label style={styles.toggle}>
-        <input
-          type="checkbox"
-          checked={hardMode}
-          onChange={() => setHardMode(v => !v)}
-        />{" "}
-        Hard Mode
-      </label>
-
-      {locked && (
-        <div style={styles.card}>
-          <p>Focus first.</p>
-          <p style={styles.timer}>
-            {timeLeft
-              ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`
-              : "Start a session"}
-          </p>
-
-          {!timeLeft && (
-            <>
-              <button style={styles.btn} onClick={() => start(30)}>30 min</button>
-              <button style={styles.btn} onClick={() => start(60)}>60 min</button>
-            </>
-          )}
-        </div>
-      )}
-
+      {/* ADD TASK */}
       <div style={styles.card}>
         <input
           style={styles.input}
-          placeholder="One hard task"
-          value={task}
-          disabled={committed}
-          onChange={e => setTask(e.target.value)}
+          placeholder="Task description"
+          value={newTask}
+          onChange={e => setNewTask(e.target.value)}
         />
 
-        {!committed && (
-          <button style={styles.btn} onClick={commitTask}>
-            Commit
-          </button>
-        )}
+        <div style={styles.row}>
+          <input
+            style={styles.time}
+            placeholder="HH"
+            value={newHour}
+            onChange={e => setNewHour(e.target.value)}
+          />
+          :
+          <input
+            style={styles.time}
+            placeholder="MM"
+            value={newMinute}
+            onChange={e => setNewMinute(e.target.value)}
+          />
+        </div>
 
-        {committed && !done && (
-          <p style={styles.hint}>Do it. Phone down.</p>
-        )}
+        <label style={styles.checkbox}>
+          <input
+            type="checkbox"
+            checked={repeatDaily}
+            onChange={() => setRepeatDaily(v => !v)}
+          />
+          Repeat daily
+        </label>
+
+        <button style={styles.btn} onClick={addTask}>Add task</button>
       </div>
 
-      {committed && (
-        <div style={styles.card}>
-          <p style={{ textDecoration: done ? "line-through" : "none" }}>
-            {task}
+      {/* TASK LIST */}
+      {tasks.map(task => (
+        <div key={task.id} style={styles.card}>
+          <p>
+            {task.title} {task.time && `@ ${task.time}`}
+            {task.repeat && " (daily)"}
           </p>
-          {!done && (
-            <>
-              <button style={styles.btn} onClick={completeTask}>
-                Mark complete
-              </button>
-              <button style={styles.penalty} onClick={quitTask}>
-                I quit / got distracted
-              </button>
-            </>
+
+          {!task.doneToday && (
+            <button
+              style={styles.btn}
+              onClick={() => setActiveTaskId(task.id)}
+            >
+              Start
+            </button>
+          )}
+
+          {task.doneToday && <p style={styles.done}>Done</p>}
+        </div>
+      ))}
+
+      {/* ACTIVE TASK */}
+      {activeTask && (
+        <div style={styles.card}>
+          <h3>{activeTask.title}</h3>
+
+          <div style={styles.row}>
+            <input
+              type="number"
+              style={styles.time}
+              value={hours}
+              onChange={e => setHours(Number(e.target.value))}
+            />
+            h
+            <input
+              type="number"
+              style={styles.time}
+              value={minutes}
+              onChange={e => setMinutes(Number(e.target.value))}
+            />
+            m
+          </div>
+
+          <p style={styles.timer}>
+            {timeLeft > 0
+              ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`
+              : "Ready"}
+          </p>
+
+          {!running && (
+            <button style={styles.btn} onClick={startTimer}>
+              Start focus
+            </button>
+          )}
+
+          {timeLeft === 0 && !running && (
+            <button
+              style={styles.btn}
+              onClick={() => completeTask(activeTask.id)}
+            >
+              Mark complete
+            </button>
           )}
         </div>
       )}
-
-      <div style={styles.card}>
-        <p>🔥 Streak: {streak}</p>
-      </div>
-
-      <div style={styles.card}>
-        <p>📊 This week</p>
-        <p>✅ Done: {week.done}</p>
-        <p>❌ Quit: {week.quit}</p>
-        <p>⚖ Net: {week.done - week.quit}</p>
-      </div>
 
       <p style={styles.footer}>Comfort rots. Effort adapts.</p>
     </div>
   );
 }
 
+/* ---------- STYLES ---------- */
 const styles = {
   page: {
     minHeight: "100vh",
@@ -180,7 +207,7 @@ const styles = {
     border: "1px solid #222",
     borderRadius: 12,
     padding: 12,
-    margin: "12px 0"
+    marginBottom: 12
   },
   input: {
     width: "100%",
@@ -188,37 +215,45 @@ const styles = {
     borderRadius: 8,
     border: "1px solid #333",
     background: "#000",
+    color: "#fff",
+    marginBottom: 8
+  },
+  time: {
+    width: 60,
+    padding: 8,
+    margin: 4,
+    textAlign: "center",
+    borderRadius: 6,
+    border: "1px solid #333",
+    background: "#000",
     color: "#fff"
+  },
+  row: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 4
   },
   btn: {
     width: "100%",
     padding: 12,
-    marginTop: 8,
     background: "#222",
     color: "#fff",
     border: "none",
-    borderRadius: 8
-  },
-  penalty: {
-    width: "100%",
-    padding: 10,
-    marginTop: 6,
-    background: "#400",
-    border: "none",
     borderRadius: 8,
-    color: "#fff"
+    marginTop: 8
   },
-  timer: {
-    fontSize: 20
-  },
-  hint: {
-    fontSize: 12,
-    color: "#777"
-  },
-  toggle: {
+  checkbox: {
     fontSize: 12,
     color: "#777",
-    marginBottom: 8
+    marginTop: 4
+  },
+  done: {
+    color: "#6f6"
+  },
+  timer: {
+    fontSize: 20,
+    margin: 8
   },
   footer: {
     fontSize: 11,
