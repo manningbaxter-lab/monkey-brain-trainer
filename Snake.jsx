@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 export default function Snake({ onExit }) {
   const canvasRef = useRef(null);
   const touchStart = useRef({ x: 0, y: 0 });
+  const [progress, setProgress] = useState(100);
 
   let snake = [{ x: 10, y: 10 }];
   let food = { x: 15, y: 15 };
@@ -11,146 +12,84 @@ export default function Snake({ onExit }) {
   const grid = 20;
   const size = 20;
   const speed = 120;
+  const MAX_TIME = 3 * 60 * 1000;
 
-  const MAX_TIME = 3 * 60 * 1000; // 3 minutes
-  const [progress, setProgress] = useState(100);
+  function vibrateAndExit() {
+    navigator.vibrate?.([200, 100, 200]);
+    onExit();
+  }
 
-  /* ---------- GAME LOOP ---------- */
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
 
     const move = () => {
-      const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
-
-      if (
-        head.x < 0 ||
-        head.y < 0 ||
-        head.x >= grid ||
-        head.y >= grid
-      ) {
+      const h = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+      if (h.x < 0 || h.y < 0 || h.x >= grid || h.y >= grid) {
         vibrateAndExit();
         return;
       }
 
-      snake.unshift(head);
-
-      if (head.x === food.x && head.y === food.y) {
-        food = {
-          x: Math.floor(Math.random() * grid),
-          y: Math.floor(Math.random() * grid)
-        };
-      } else {
-        snake.pop();
-      }
+      snake.unshift(h);
+      if (h.x === food.x && h.y === food.y) {
+        food = { x: Math.random()*20|0, y: Math.random()*20|0 };
+      } else snake.pop();
 
       ctx.clearRect(0, 0, 400, 400);
       ctx.fillStyle = "#0f0";
-      snake.forEach(s =>
-        ctx.fillRect(s.x * size, s.y * size, size - 2, size - 2)
-      );
+      snake.forEach(s => ctx.fillRect(s.x*size, s.y*size, size-2, size-2));
       ctx.fillStyle = "#f00";
-      ctx.fillRect(food.x * size, food.y * size, size - 2, size - 2);
+      ctx.fillRect(food.x*size, food.y*size, size-2, size-2);
     };
 
     const interval = setInterval(move, speed);
     return () => clearInterval(interval);
   }, []);
 
-  /* ---------- HARD AUTO-END + PROGRESS ---------- */
   useEffect(() => {
     const start = Date.now();
-
-    const tick = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const remaining = Math.max(0, 100 - (elapsed / MAX_TIME) * 100);
-      setProgress(remaining);
-
-      if (elapsed >= MAX_TIME) {
-        vibrateAndExit();
-      }
+    const t = setInterval(() => {
+      const pct = Math.max(0, 100 - ((Date.now()-start)/MAX_TIME)*100);
+      setProgress(pct);
+      if (pct === 0) vibrateAndExit();
     }, 200);
-
-    return () => clearInterval(tick);
+    return () => clearInterval(t);
   }, []);
 
-  /* ---------- KEYBOARD ---------- */
   useEffect(() => {
-    const onKey = e => {
-      if (e.key === "ArrowUp") dir = { x: 0, y: -1 };
-      if (e.key === "ArrowDown") dir = { x: 0, y: 1 };
-      if (e.key === "ArrowLeft") dir = { x: -1, y: 0 };
-      if (e.key === "ArrowRight") dir = { x: 1, y: 0 };
+    const k = e => {
+      if (e.key === "ArrowUp") dir={x:0,y:-1};
+      if (e.key === "ArrowDown") dir={x:0,y:1};
+      if (e.key === "ArrowLeft") dir={x:-1,y:0};
+      if (e.key === "ArrowRight") dir={x:1,y:0};
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
   }, []);
 
-  /* ---------- TOUCH CONTROLS ---------- */
-  function handleTouchStart(e) {
+  function touchStartHandler(e) {
     const t = e.touches[0];
-    touchStart.current = { x: t.clientX, y: t.clientY };
+    touchStart.current={x:t.clientX,y:t.clientY};
   }
-
-  function handleTouchEnd(e) {
-    const t = e.changedTouches[0];
-    const dx = t.clientX - touchStart.current.x;
-    const dy = t.clientY - touchStart.current.y;
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 20) dir = { x: 1, y: 0 };
-      else if (dx < -20) dir = { x: -1, y: 0 };
-    } else {
-      if (dy > 20) dir = { x: 0, y: 1 };
-      else if (dy < -20) dir = { x: 0, y: -1 };
-    }
-  }
-
-  /* ---------- VIBRATION ---------- */
-  function vibrateAndExit() {
-    if (navigator.vibrate) {
-      navigator.vibrate([200, 100, 200]);
-    }
-    onExit();
+  function touchEndHandler(e) {
+    const t=e.changedTouches[0];
+    const dx=t.clientX-touchStart.current.x;
+    const dy=t.clientY-touchStart.current.y;
+    if (Math.abs(dx)>Math.abs(dy)) dir={x:dx>0?1:-1,y:0};
+    else dir={x:0,y:dy>0?1:-1};
   }
 
   return (
-    <div style={{ textAlign: "center", color: "#fff" }}>
-      <p>Reward unlocked — limited time</p>
-
-      {/* TIME BAR */}
-      <div
-        style={{
-          width: "100%",
-          height: 6,
-          background: "#222",
-          borderRadius: 3,
-          overflow: "hidden",
-          marginBottom: 8
-        }}
-      >
-        <div
-          style={{
-            width: `${progress}%`,
-            height: "100%",
-            background: "#0f0",
-            transition: "width 0.2s linear"
-          }}
-        />
+    <div style={{textAlign:"center",color:"#fff",padding:16}}>
+      <div style={{background:"#222",height:6,borderRadius:3,overflow:"hidden"}}>
+        <div style={{width:`${progress}%`,height:"100%",background:"#0f0"}}/>
       </div>
-
-      <canvas
-        ref={canvasRef}
-        width={400}
-        height={400}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        style={{ touchAction: "none" }}
+      <canvas ref={canvasRef} width={400} height={400}
+        onTouchStart={touchStartHandler}
+        onTouchEnd={touchEndHandler}
+        style={{touchAction:"none",marginTop:12}}
       />
-
-      <button onClick={vibrateAndExit} style={{ marginTop: 12 }}>
-        Exit
-      </button>
+      <button onClick={vibrateAndExit} style={{marginTop:12}}>Exit</button>
     </div>
   );
 }
