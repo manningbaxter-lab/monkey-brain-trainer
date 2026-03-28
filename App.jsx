@@ -4,9 +4,7 @@ import Snake from "./Snake.jsx";
 const isiOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 const MIN_FOCUS_SECONDS = 10 * 60;
 
-/* =================================================
-   Helpers
-================================================= */
+/* ================= Helpers ================= */
 function now() {
   return Date.now();
 }
@@ -24,31 +22,37 @@ function getWeekKey(date = new Date()) {
   return `${date.getFullYear()}-W${Math.ceil((days + firstJan.getDay() + 1) / 7)}`;
 }
 
-/* =================================================
-   App
-================================================= */
+/* ================= App ================= */
 export default function App() {
-  /* ---------- Tasks + Per‑Task Stats ---------- */
+  /* ---------- Navigation ---------- */
+  const [view, setView] = useState("home"); // home | tasks | history | weekly
+
+  /* ---------- Tasks ---------- */
   const [tasks, setTasks] = useState([]);
-  const [taskStats, setTaskStats] = useState({});
   const [newTask, setNewTask] = useState("");
   const [activeTaskId, setActiveTaskId] = useState(null);
 
-  /* ---------- Focus Timing (robust) ---------- */
+  /* ---------- Focus Timing ---------- */
   const [focusStartTime, setFocusStartTime] = useState(null);
   const [focusEndTime, setFocusEndTime] = useState(null);
   const [timeLeftMs, setTimeLeftMs] = useState(0);
 
-  /* ---------- Screen Time (Level 1) ---------- */
+  /* ---------- Screen Time ---------- */
   const [screenTimeReady, setScreenTimeReady] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
-  /* ---------- Adaptive Nudges ---------- */
+  /* ---------- Adaptive ---------- */
   const [earlyEndsToday, setEarlyEndsToday] = useState(0);
   const [completedToday, setCompletedToday] = useState(0);
   const [showNudge, setShowNudge] = useState(false);
 
-  /* ---------- Weekly Summary ---------- */
+  /* ---------- Per‑Task Stats ---------- */
+  const [taskStats, setTaskStats] = useState({});
+
+  /* ---------- History ---------- */
+  const [history, setHistory] = useState([]);
+
+  /* ---------- Weekly ---------- */
   const weekKey = getWeekKey();
   const [weeklyStats, setWeeklyStats] = useState({
     started: 0,
@@ -57,26 +61,33 @@ export default function App() {
     focusedMs: 0
   });
   const [weeklyReflection, setWeeklyReflection] = useState("");
-  const [showWeeklySummary, setShowWeeklySummary] = useState(false);
 
   /* ---------- Snake ---------- */
   const [snakeUnlocked, setSnakeUnlocked] = useState(false);
   const [showSnake, setShowSnake] = useState(false);
 
-  /* =================================================
-     Load / Save
-  ================================================= */
+  /* ================= Load / Save ================= */
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("mbt"));
     if (saved) {
+      Object.assign(
+        {
+          tasks: setTasks,
+          screenTimeReady: setScreenTimeReady,
+          earlyEndsToday: setEarlyEndsToday,
+          completedToday: setCompletedToday,
+          taskStats: setTaskStats,
+          history: setHistory,
+          snakeUnlocked: setSnakeUnlocked
+        },
+        Object.entries(saved || {}).reduce((a,[k,v]) => (a[k] = () => {}, a), {})
+      );
       setTasks(saved.tasks || []);
       setTaskStats(saved.taskStats || {});
+      setHistory(saved.history || []);
       setScreenTimeReady(saved.screenTimeReady || false);
       setEarlyEndsToday(saved.earlyEndsToday || 0);
       setCompletedToday(saved.completedToday || 0);
-      setActiveTaskId(saved.activeTaskId || null);
-      setFocusStartTime(saved.focusStartTime || null);
-      setFocusEndTime(saved.focusEndTime || null);
       setSnakeUnlocked(saved.snakeUnlocked || false);
     }
 
@@ -93,26 +104,14 @@ export default function App() {
       JSON.stringify({
         tasks,
         taskStats,
+        history,
         screenTimeReady,
         earlyEndsToday,
         completedToday,
-        activeTaskId,
-        focusStartTime,
-        focusEndTime,
         snakeUnlocked
       })
     );
-  }, [
-    tasks,
-    taskStats,
-    screenTimeReady,
-    earlyEndsToday,
-    completedToday,
-    activeTaskId,
-    focusStartTime,
-    focusEndTime,
-    snakeUnlocked
-  ]);
+  }, [tasks, taskStats, history, screenTimeReady, earlyEndsToday, completedToday, snakeUnlocked]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -121,9 +120,7 @@ export default function App() {
     );
   }, [weeklyStats, weeklyReflection, weekKey]);
 
-  /* =================================================
-     Timer UI refresh (time‑safe)
-  ================================================= */
+  /* ================= Timer ================= */
   useEffect(() => {
     const i = setInterval(() => {
       if (!focusEndTime) return;
@@ -131,35 +128,25 @@ export default function App() {
       setTimeLeftMs(diff);
       if (diff <= 0) endFocus(true);
     }, 1000);
-
     return () => clearInterval(i);
   }, [focusEndTime]);
 
-  /* =================================================
-     Derived Suggestions
-  ================================================= */
+  /* ================= Logic ================= */
+
   function getRecommendedMinutes() {
     if (earlyEndsToday >= 2) return 20;
     if (completedToday >= 2) return 40;
     return 30;
   }
 
-  function getTaskDifficultyHint(taskId) {
-    const stats = taskStats[taskId];
-    if (!stats) return null;
-
-    if (stats.early >= 2) {
-      return "Suggestion: break this task into a smaller step";
-    }
-    if (stats.completed >= 3 && stats.early === 0) {
-      return "Suggestion: this may be too easy — consider increasing challenge";
-    }
+  function getTaskHint(taskId) {
+    const s = taskStats[taskId];
+    if (!s) return null;
+    if (s.early >= 2) return "Suggestion: break this into a smaller step";
+    if (s.completed >= 3 && s.early === 0) return "Suggestion: increase challenge";
     return null;
   }
 
-  /* =================================================
-     Actions
-  ================================================= */
   function addTask() {
     if (!newTask.trim()) return;
     const id = Date.now();
@@ -173,61 +160,48 @@ export default function App() {
       setShowGuide(true);
       return;
     }
-
     const seconds = minutes * 60;
     if (seconds < MIN_FOCUS_SECONDS) {
       alert("Minimum focus time is 10 minutes.");
       return;
     }
-
     const start = now();
     const end = start + seconds * 1000;
-
-    setWeeklyStats(s => ({ ...s, started: s.started + 1 }));
     setActiveTaskId(taskId);
     setFocusStartTime(start);
     setFocusEndTime(end);
     setTimeLeftMs(end - start);
+    setWeeklyStats(s => ({ ...s, started: s.started + 1 }));
+    setView("tasks");
   }
 
-  function endFocus(auto = false) {
-    if (!activeTaskId) return;
-
-    const workedMs = focusStartTime ? now() - focusStartTime : 0;
+  function endFocus(completed) {
+    const worked = focusStartTime ? now() - focusStartTime : 0;
+    const task = tasks.find(t => t.id === activeTaskId);
     const stats = taskStats[activeTaskId] || { early: 0, completed: 0 };
 
-    if (auto) {
-      setTaskStats({
-        ...taskStats,
-        [activeTaskId]: {
-          ...stats,
-          completed: stats.completed + 1
-        }
-      });
+    setHistory([
+      {
+        id: Date.now(),
+        task: task?.title,
+        duration: worked,
+        result: completed ? "completed" : "ended early",
+        date: new Date().toLocaleString()
+      },
+      ...history
+    ]);
+
+    if (completed) {
+      setTaskStats({ ...taskStats, [activeTaskId]: { ...stats, completed: stats.completed + 1 } });
+      setWeeklyStats(s => ({ ...s, completed: s.completed + 1, focusedMs: s.focusedMs + worked }));
       setCompletedToday(c => c + 1);
-      setWeeklyStats(s => ({
-        ...s,
-        completed: s.completed + 1,
-        focusedMs: s.focusedMs + workedMs
-      }));
       setSnakeUnlocked(true);
     } else {
-      const count = earlyEndsToday + 1;
-      setEarlyEndsToday(count);
-      if (count >= 2) setShowNudge(true);
-
-      setTaskStats({
-        ...taskStats,
-        [activeTaskId]: {
-          ...stats,
-          early: stats.early + 1
-        }
-      });
-      setWeeklyStats(s => ({
-        ...s,
-        endedEarly: s.endedEarly + 1,
-        focusedMs: s.focusedMs + workedMs
-      }));
+      const e = earlyEndsToday + 1;
+      setEarlyEndsToday(e);
+      if (e >= 2) setShowNudge(true);
+      setTaskStats({ ...taskStats, [activeTaskId]: { ...stats, early: stats.early + 1 } });
+      setWeeklyStats(s => ({ ...s, endedEarly: s.endedEarly + 1, focusedMs: s.focusedMs + worked }));
     }
 
     setActiveTaskId(null);
@@ -236,186 +210,160 @@ export default function App() {
     setTimeLeftMs(0);
   }
 
-  const activeTask = tasks.find(t => t.id === activeTaskId);
-  const recommendedMinutes = getRecommendedMinutes();
-
-  /* =================================================
-     Screens (unchanged except additions)
-  ================================================= */
+  /* ================= Screens ================= */
 
   if (showSnake) {
-    return (
-      <Snake
-        onExit={() => {
-          setShowSnake(false);
-          setSnakeUnlocked(false);
-        }}
-      />
-    );
+    return <Snake onExit={() => { setShowSnake(false); setSnakeUnlocked(false); }} />;
   }
 
   if (showGuide) {
     return (
-      <div style={styles.page}>
-        <div style={styles.app}>
-          <div style={styles.card}>
-            <h2>Set up Focus Blocking</h2>
-            <p style={styles.dim}>
-              Use iOS Screen Time to reduce distractions during focus.
-            </p>
-            <ol style={styles.list}>
-              <li>Open <b>Settings</b></li>
-              <li>Tap <b>Screen Time</b> → Turn On</li>
-              <li>Set <b>App Limits</b> for distracting apps</li>
-              <li>Optionally enable <b>Downtime</b></li>
-            </ol>
-            <button
-              style={styles.btn}
-              onClick={() => {
-                setScreenTimeReady(true);
-                setShowGuide(false);
-              }}
-            >
-              I’ve set it up
-            </button>
-            <button style={styles.subtleBtn} onClick={() => setShowGuide(false)}>
-              Do this later
-            </button>
-          </div>
-        </div>
-      </div>
+      <ScreenTimeGuide
+        onDone={() => { setScreenTimeReady(true); setShowGuide(false); }}
+        onLater={() => setShowGuide(false)}
+      />
     );
   }
 
-  if (showWeeklySummary) {
-    return (
-      <div style={styles.page}>
-        <div style={styles.app}>
-          <div style={styles.card}>
+  return (
+    <div style={styles.page}>
+      <div style={styles.app}>
+        <Nav view={view} setView={setView} />
+
+        {view === "home" && (
+          <>
+            <h2>Today</h2>
+            <p style={styles.dim}>
+              Suggested focus length: {getRecommendedMinutes()} minutes
+            </p>
+            {snakeUnlocked && <p>🐍 Reward available</p>}
+          </>
+        )}
+
+        {view === "tasks" && (
+          <>
+            <div style={styles.card}>
+              <input
+                style={styles.input}
+                placeholder="New task"
+                value={newTask}
+                onChange={e => setNewTask(e.target.value)}
+              />
+              <button style={styles.btn} onClick={addTask}>Add task</button>
+            </div>
+
+            {tasks.map(t => (
+              <div key={t.id} style={styles.card}>
+                <p>{t.title}</p>
+                {getTaskHint(t.id) && <p style={styles.dim}>{getTaskHint(t.id)}</p>}
+                {!focusEndTime && (
+                  <button
+                    style={styles.btn}
+                    onClick={() => startFocus(t.id, getRecommendedMinutes())}
+                  >
+                    Start focus
+                  </button>
+                )}
+                {focusEndTime && activeTaskId === t.id && (
+                  <>
+                    <p>{formatTime(timeLeftMs)}</p>
+                    <button style={styles.penaltyBtn} onClick={() => endFocus(false)}>
+                      End early
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+
+        {view === "history" && (
+          <>
+            <h2>History</h2>
+            {history.length === 0 && <p style={styles.dim}>No sessions yet.</p>}
+            {history.map(h => (
+              <div key={h.id} style={styles.card}>
+                <p><b>{h.task}</b></p>
+                <p>{h.result} – {formatTime(h.duration)}</p>
+                <p style={styles.dim}>{h.date}</p>
+              </div>
+            ))}
+          </>
+        )}
+
+        {view === "weekly" && (
+          <>
             <h2>This Week</h2>
-            <p>Started: {weeklyStats.started}</p>
             <p>Completed: {weeklyStats.completed}</p>
             <p>Ended early: {weeklyStats.endedEarly}</p>
             <p>Focused: {formatTime(weeklyStats.focusedMs)}</p>
             <textarea
               style={styles.textarea}
-              placeholder="Reflection..."
+              placeholder="Reflection…"
               value={weeklyReflection}
               onChange={e => setWeeklyReflection(e.target.value)}
             />
-            <button style={styles.btn} onClick={() => setShowWeeklySummary(false)}>
-              Done
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* =================================================
-     Main UI
-  ================================================= */
-  return (
-    <div style={styles.page}>
-      <div style={styles.app}>
-        <h1>🐵 Monkey Brain Trainer</h1>
-
-        {showNudge && (
-          <div style={styles.notice}>
-            You’ve ended focus early a few times today.
-            Shorter sessions or simpler tasks may help.
-            <button style={styles.linkBtn} onClick={() => setShowNudge(false)}>
-              Got it
-            </button>
-          </div>
+          </>
         )}
-
-        <button style={styles.subtleBtn} onClick={() => setShowWeeklySummary(true)}>
-          Weekly focus summary
-        </button>
-
-        {isiOS && !screenTimeReady && (
-          <div style={styles.notice}>
-            Focus Blocking isn’t set up yet.
-            <button style={styles.linkBtn} onClick={() => setShowGuide(true)}>
-              Set it up
-            </button>
-          </div>
-        )}
-
-        <div style={styles.card}>
-          <input
-            style={styles.input}
-            placeholder="One important task"
-            value={newTask}
-            onChange={e => setNewTask(e.target.value)}
-          />
-          <button style={styles.btn} onClick={addTask}>
-            Add task
-          </button>
-        </div>
-
-        {tasks.map(task => {
-          const hint = getTaskDifficultyHint(task.id);
-
-          return (
-            <div key={task.id} style={styles.card}>
-              <p>{task.title}</p>
-
-              {hint && <p style={styles.dim}>{hint}</p>}
-
-              {!focusEndTime && (
-                <>
-                  <p style={styles.dim}>
-                    Suggested focus: {recommendedMinutes} minutes
-                  </p>
-                  <button
-                    style={styles.btn}
-                    onClick={() => startFocus(task.id, recommendedMinutes)}
-                  >
-                    Start recommended focus
-                  </button>
-                  <button
-                    style={styles.subtleBtn}
-                    onClick={() => startFocus(task.id, 30)}
-                  >
-                    Start 30‑minute focus
-                  </button>
-                </>
-              )}
-
-              {focusEndTime && activeTask?.id === task.id && (
-                <>
-                  <p style={styles.timer}>{formatTime(timeLeftMs)}</p>
-                  <button
-                    style={styles.penaltyBtn}
-                    onClick={() => endFocus(false)}
-                  >
-                    End early
-                  </button>
-                </>
-              )}
-            </div>
-          );
-        })}
 
         <button
           style={{ ...styles.btn, opacity: snakeUnlocked ? 1 : 0.4 }}
           disabled={!snakeUnlocked}
-          onClick={() => snakeUnlocked && setShowSnake(true)}
+          onClick={() => setShowSnake(true)}
         >
-          🐍 Snake — {snakeUnlocked ? "Reward unlocked" : "Complete a focus session"}
+          🐍 Snake
         </button>
 
-        <p style={styles.footer}>Comfort rots. Effort adapts.</p>
+        {showNudge && (
+          <div style={styles.notice}>
+            You’ve ended focus early a few times today. Shortening or simplifying a task may help.
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* =================================================
-   Styles
-================================================= */
+/* ================= Components ================= */
+
+function Nav({ view, setView }) {
+  return (
+    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      {["home","tasks","history","weekly"].map(v => (
+        <button
+          key={v}
+          style={{ ...styles.subtleBtn, fontWeight: view === v ? "bold" : "normal" }}
+          onClick={() => setView(v)}
+        >
+          {v.charAt(0).toUpperCase() + v.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ScreenTimeGuide({ onDone, onLater }) {
+  return (
+    <div style={styles.page}>
+      <div style={styles.app}>
+        <div style={styles.card}>
+          <h2>Set up Focus Blocking</h2>
+          <ol style={styles.list}>
+            <li>Open Settings</li>
+            <li>Screen Time → Turn On</li>
+            <li>Set App Limits</li>
+            <li>Optional: Downtime</li>
+          </ol>
+          <button style={styles.btn} onClick={onDone}>I’ve set it up</button>
+          <button style={styles.subtleBtn} onClick={onLater}>Do later</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================= Styles ================= */
+
 const styles = {
   page: {
     background: "#0b0b0f",
@@ -429,52 +377,26 @@ const styles = {
   app: { maxWidth: 420, width: "100%" },
   card: { background: "#16161d", borderRadius: 16, padding: 14, marginBottom: 12 },
   input: {
-    width: "100%",
-    padding: 12,
-    borderRadius: 12,
-    background: "#0f0f15",
-    color: "#fff",
-    border: "1px solid #333",
-    marginBottom: 8
+    width: "100%", padding: 12, borderRadius: 12,
+    background: "#0f0f15", color: "#fff", border: "1px solid #333", marginBottom: 8
   },
   textarea: {
-    width: "100%",
-    minHeight: 80,
-    marginTop: 8,
-    borderRadius: 12,
-    padding: 12,
-    background: "#0f0f15",
-    color: "#fff",
-    border: "1px solid #333"
+    width: "100%", minHeight: 80, marginTop: 8,
+    borderRadius: 12, padding: 12, background: "#0f0f15", color: "#fff", border: "1px solid #333"
   },
   btn: {
-    width: "100%",
-    padding: 14,
-    background: "#1f2937",
-    borderRadius: 12,
-    border: "none",
-    color: "#fff",
-    marginTop: 6
+    width: "100%", padding: 14, background: "#1f2937",
+    borderRadius: 12, border: "none", color: "#fff", marginTop: 6
   },
   subtleBtn: {
-    background: "transparent",
-    border: "none",
-    color: "#9ca3af",
-    marginBottom: 6
+    background: "transparent", border: "none",
+    color: "#9ca3af", cursor: "pointer"
   },
   penaltyBtn: {
-    width: "100%",
-    padding: 14,
-    background: "#7f1d1d",
-    borderRadius: 12,
-    border: "none",
-    color: "#fff",
-    marginTop: 6
+    width: "100%", padding: 14, background: "#7f1d1d",
+    borderRadius: 12, border: "none", color: "#fff", marginTop: 6
   },
-  notice: { fontSize: 13, opacity: 0.85, marginBottom: 12 },
-  linkBtn: { marginLeft: 8, background: "none", border: "none", color: "#93c5fd" },
-  dim: { opacity: 0.7, marginBottom: 6 },
-  list: { fontSize: 14, lineHeight: 1.5 },
-  timer: { fontSize: 20, marginTop: 6 },
-  footer: { fontSize: 11, opacity: 0.6, textAlign: "center", marginTop: 16 }
+  notice: { marginTop: 12, fontSize: 13, opacity: 0.85 },
+  dim: { opacity: 0.7 },
+  list: { fontSize: 14, lineHeight: 1.5 }
 };
