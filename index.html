@@ -6,14 +6,23 @@
 
     <title>Monkey Brain Trainer</title>
 
-    <!-- ✅ REQUIRED for app icon -->
+    <!-- App icon + PWA -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <style>
+      body {
+        margin: 0;
+        overscroll-behavior-y: contain;
+        background: black;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
 
-    <!-- ✅ REQUIRED to run React -->
     <script type="module" src="/main.jsx"></script>
   </body>
 </html>
