@@ -1,154 +1,140 @@
 import React, { useState, useEffect } from "react";
 
 const isiOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-const MIN_FOCUS_SECONDS = 10 * 60;
+const MIN_SECONDS = 10 * 60;
 
-/* -------------------------------------------
+/* ------------------------------------------
    Helpers
--------------------------------------------- */
-function getWeekKey(date = new Date()) {
-  const firstJan = new Date(date.getFullYear(), 0, 1);
-  const days = Math.floor((date - firstJan) / 86400000);
-  return `${date.getFullYear()}-W${Math.ceil((days + firstJan.getDay() + 1) / 7)}`;
+------------------------------------------- */
+function now() {
+  return Date.now();
 }
 
-/* -------------------------------------------
+function formatTime(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/* ------------------------------------------
    App
--------------------------------------------- */
+------------------------------------------- */
 export default function App() {
-  /* ---------- Core State ---------- */
+  /* ---------- Tasks ---------- */
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
   const [activeTaskId, setActiveTaskId] = useState(null);
 
-  const [hours, setHours] = useState(0);
-  const [minutes, setMinutes] = useState(30);
-  const [running, setRunning] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(0);
+  /* ---------- Focus / Timer ---------- */
+  const [focusEndTime, setFocusEndTime] = useState(null); // timestamp in ms
+  const [timeLeftMs, setTimeLeftMs] = useState(0);
 
-  /* ---------- Screen Time (Level‑1) ---------- */
+  /* ---------- Screen Time Level‑1 ---------- */
   const [screenTimeReady, setScreenTimeReady] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
-  /* ---------- Smart Nudge Tracking ---------- */
+  /* ---------- Smart Nudges ---------- */
   const [earlyEndsToday, setEarlyEndsToday] = useState(0);
   const [showNudge, setShowNudge] = useState(false);
 
-  /* ---------- Weekly Stats + Reflection ---------- */
-  const [weekKey] = useState(getWeekKey());
-  const [weekStats, setWeekStats] = useState({
-    started: 0,
-    completed: 0,
-    endedEarly: 0
-  });
-  const [reflection, setReflection] = useState("");
-  const [showWeeklyReview, setShowWeeklyReview] = useState(false);
-
-  /* ---------- Persistence ---------- */
+  /* ---------- Load / Save ---------- */
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("mbt_state"));
-    if (saved) {
-      setTasks(saved.tasks || []);
-      setScreenTimeReady(saved.screenTimeReady || false);
-      setEarlyEndsToday(saved.earlyEndsToday || 0);
-    }
+    const saved = JSON.parse(localStorage.getItem("mbt"));
+    if (!saved) return;
 
-    const weekly = JSON.parse(localStorage.getItem(`mbt_week_${weekKey}`));
-    if (weekly) {
-      setWeekStats(weekly.stats);
-      setReflection(weekly.reflection || "");
-    }
-  }, [weekKey]);
+    setTasks(saved.tasks || []);
+    setScreenTimeReady(saved.screenTimeReady || false);
+    setEarlyEndsToday(saved.earlyEndsToday || 0);
+    setFocusEndTime(saved.focusEndTime || null);
+    setActiveTaskId(saved.activeTaskId || null);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(
-      "mbt_state",
-      JSON.stringify({ tasks, screenTimeReady, earlyEndsToday })
+      "mbt",
+      JSON.stringify({
+        tasks,
+        screenTimeReady,
+        earlyEndsToday,
+        focusEndTime,
+        activeTaskId
+      })
     );
-  }, [tasks, screenTimeReady, earlyEndsToday]);
+  }, [tasks, screenTimeReady, earlyEndsToday, focusEndTime, activeTaskId]);
 
+  /* ---------- Timer Refresh Loop (UI only) ---------- */
   useEffect(() => {
-    localStorage.setItem(
-      `mbt_week_${weekKey}`,
-      JSON.stringify({ stats: weekStats, reflection })
-    );
-  }, [weekStats, reflection, weekKey]);
+    const i = setInterval(() => {
+      if (!focusEndTime) return;
 
-  /* ---------- Timer ---------- */
-  useEffect(() => {
-    if (!running || timeLeft <= 0) return;
-    const t = setInterval(() => setTimeLeft(v => v - 1), 1000);
-    return () => clearInterval(t);
-  }, [running, timeLeft]);
+      const diff = focusEndTime - now();
+      setTimeLeftMs(diff);
 
-  /* -------------------------------------------
+      if (diff <= 0) {
+        endFocus(true);
+      }
+    }, 1000);
+
+    return () => clearInterval(i);
+  }, [focusEndTime]);
+
+  /* ------------------------------------------
      Actions
-  -------------------------------------------- */
+  ------------------------------------------- */
   function addTask() {
     if (!newTask.trim()) return;
     setTasks([...tasks, { id: Date.now(), title: newTask }]);
     setNewTask("");
   }
 
-  function startFocus(taskId) {
+  function startFocus(taskId, hours, minutes) {
     if (isiOS && !screenTimeReady) {
       setShowGuide(true);
       return;
     }
 
-    const totalSeconds = hours * 3600 + minutes * 60;
-    if (totalSeconds < MIN_FOCUS_SECONDS) {
+    const seconds = hours * 3600 + minutes * 60;
+    if (seconds < MIN_SECONDS) {
       alert("Minimum focus time is 10 minutes.");
       return;
     }
 
-    setWeekStats(s => ({ ...s, started: s.started + 1 }));
+    const end = now() + seconds * 1000;
     setActiveTaskId(taskId);
-    setTimeLeft(totalSeconds);
-    setRunning(true);
+    setFocusEndTime(end);
+    setTimeLeftMs(end - now());
   }
 
-  function completeFocus() {
-    setWeekStats(s => ({ ...s, completed: s.completed + 1 }));
-    resetFocus();
-  }
-
-  function endEarly() {
-    const newCount = earlyEndsToday + 1;
-    setEarlyEndsToday(newCount);
-    setWeekStats(s => ({ ...s, endedEarly: s.endedEarly + 1 }));
-
-    if (newCount >= 2) {
-      setShowNudge(true);
+  function endFocus(auto = false) {
+    if (!auto) {
+      const count = earlyEndsToday + 1;
+      setEarlyEndsToday(count);
+      if (count >= 2) setShowNudge(true);
     }
 
-    resetFocus();
-  }
-
-  function resetFocus() {
-    setRunning(false);
-    setTimeLeft(0);
+    setFocusEndTime(null);
+    setTimeLeftMs(0);
     setActiveTaskId(null);
   }
 
-  const activeTask = tasks.find(t => t.id === activeTaskId);
-
-  /* -------------------------------------------
-     Screen Time Guide (Level‑1)
-  -------------------------------------------- */
+  /* ------------------------------------------
+     Screen Time Guide (1)
+  ------------------------------------------- */
   if (showGuide) {
     return (
       <div style={styles.page}>
         <div style={styles.app}>
           <div style={styles.card}>
             <h2>Set up Focus Blocking</h2>
+
             <p style={styles.dim}>
-              To reduce distractions, use iOS Screen Time during focus sessions.
+              Monkey Brain Trainer works best when iOS Screen Time helps reduce distractions.
             </p>
 
             <ol style={styles.list}>
-              <li>Open the <b>Settings</b> app</li>
-              <li>Go to <b>Screen Time</b> → Turn On</li>
+              <li>Open your iPhone’s <b>Settings</b></li>
+              <li>Tap <b>Screen Time</b> → Turn On</li>
               <li>Set <b>App Limits</b> for distracting apps</li>
               <li>Optionally enable <b>Downtime</b> during focus hours</li>
             </ol>
@@ -175,67 +161,26 @@ export default function App() {
     );
   }
 
-  /* -------------------------------------------
-     Weekly Review Screen (Feature 3)
-  -------------------------------------------- */
-  if (showWeeklyReview) {
-    return (
-      <div style={styles.page}>
-        <div style={styles.app}>
-          <div style={styles.card}>
-            <h2>This Week</h2>
-
-            <p>Focus sessions started: <b>{weekStats.started}</b></p>
-            <p>Completed: <b>{weekStats.completed}</b></p>
-            <p>Ended early: <b>{weekStats.endedEarly}</b></p>
-
-            <textarea
-              style={styles.textarea}
-              placeholder="Reflection: What helped? What got in the way?"
-              value={reflection}
-              onChange={e => setReflection(e.target.value)}
-            />
-
-            <button
-              style={styles.btn}
-              onClick={() => setShowWeeklyReview(false)}
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* -------------------------------------------
+  /* ------------------------------------------
      Main UI
-  -------------------------------------------- */
+  ------------------------------------------- */
+  const activeTask = tasks.find(t => t.id === activeTaskId);
+
   return (
     <div style={styles.page}>
       <div style={styles.app}>
         <h1>🐵 Monkey Brain Trainer</h1>
 
-        {/* Reminder nudge */}
         {showNudge && (
           <div style={styles.notice}>
-            You’ve ended focus early a few times today.  
-            Consider a shorter session, or double‑check Screen Time setup.
+            You’ve ended focus early a few times today.
+            Consider a shorter session or checking Screen Time.
             <button style={styles.linkBtn} onClick={() => setShowNudge(false)}>
               Got it
             </button>
           </div>
         )}
 
-        {/* Weekly review access */}
-        <button
-          style={styles.subtleBtn}
-          onClick={() => setShowWeeklyReview(true)}
-        >
-          Weekly review
-        </button>
-
-        {/* Screen Time reminder */}
         {isiOS && !screenTimeReady && (
           <div style={styles.notice}>
             Focus Blocking isn’t set up yet.
@@ -245,7 +190,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Add task */}
         <div style={styles.card}>
           <input
             style={styles.input}
@@ -258,41 +202,23 @@ export default function App() {
           </button>
         </div>
 
-        {/* Tasks */}
         {tasks.map(task => (
           <div key={task.id} style={styles.card}>
             <p>{task.title}</p>
 
-            {!running && (
-              <>
-                <input
-                  type="number"
-                  style={styles.time}
-                  value={hours}
-                  onChange={e => setHours(Number(e.target.value))}
-                /> h
-                <input
-                  type="number"
-                  style={styles.time}
-                  value={minutes}
-                  onChange={e => setMinutes(Number(e.target.value))}
-                /> m
-                <button style={styles.btn} onClick={() => startFocus(task.id)}>
-                  Start focus
-                </button>
-              </>
+            {!focusEndTime && (
+              <button
+                style={styles.btn}
+                onClick={() => startFocus(task.id, 0, 30)}
+              >
+                Start 30 min focus
+              </button>
             )}
 
-            {running && activeTask?.id === task.id && (
+            {focusEndTime && activeTask?.id === task.id && (
               <>
-                <p style={styles.timer}>
-                  {Math.floor(timeLeft / 60)}:
-                  {String(timeLeft % 60).padStart(2, "0")}
-                </p>
-                <button style={styles.btn} onClick={completeFocus}>
-                  Finish
-                </button>
-                <button style={styles.penaltyBtn} onClick={endEarly}>
+                <p style={styles.timer}>{formatTime(timeLeftMs)}</p>
+                <button style={styles.penaltyBtn} onClick={() => endFocus(false)}>
                   End early
                 </button>
               </>
@@ -306,9 +232,9 @@ export default function App() {
   );
 }
 
-/* -------------------------------------------
+/* ------------------------------------------
    Styles
--------------------------------------------- */
+------------------------------------------- */
 const styles = {
   page: {
     background: "#0b0b0f",
@@ -319,7 +245,7 @@ const styles = {
     padding: 16,
     fontFamily: "system-ui, -apple-system"
   },
-  app: { maxWidth: 420, width: "100%" },
+  app: { width: "100%", maxWidth: 420 },
   card: {
     background: "#16161d",
     borderRadius: 16,
@@ -335,22 +261,12 @@ const styles = {
     color: "#fff",
     marginBottom: 8
   },
-  textarea: {
-    width: "100%",
-    minHeight: 80,
-    borderRadius: 12,
-    padding: 12,
-    background: "#0f0f15",
-    color: "#fff",
-    border: "1px solid #333",
-    marginTop: 8
-  },
   btn: {
     width: "100%",
     padding: 14,
     background: "#1f2937",
-    border: "none",
     borderRadius: 12,
+    border: "none",
     color: "#fff",
     marginTop: 6
   },
@@ -358,19 +274,17 @@ const styles = {
     background: "transparent",
     border: "none",
     color: "#9ca3af",
-    marginBottom: 8
+    marginTop: 8
   },
   penaltyBtn: {
     width: "100%",
     padding: 14,
     background: "#7f1d1d",
-    border: "none",
     borderRadius: 12,
+    border: "none",
     color: "#fff",
     marginTop: 6
   },
-  time: { width: 60, margin: "0 4px" },
-  timer: { fontSize: 20, marginTop: 6 },
   notice: {
     fontSize: 13,
     opacity: 0.85,
@@ -384,6 +298,7 @@ const styles = {
   },
   dim: { opacity: 0.7 },
   list: { fontSize: 14, lineHeight: 1.5 },
+  timer: { fontSize: 20, marginTop: 6 },
   footer: {
     fontSize: 11,
     opacity: 0.6,
